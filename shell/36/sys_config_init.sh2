@@ -1,0 +1,50 @@
+#!/bin/bash
+#
+
+# 设置时区并同步时间
+ln -s /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
+if ! crontab -l | grep ntpdate &>/dev/null;then
+  (echo "* 1 * * * ntpdate time.windows.com >/dev/null 2>&1";crontab -l) | crontab
+fi
+
+# 禁用selinux
+sed -ri 's/SELINUX=[a-z]{9,10}/SELINUX=disabled/g' /etc/selinux/config
+setenforce 0
+
+# 关闭防火墙
+if grep '7.[0-9]' /etc/redhat-release &>/dev/null;then
+  systemctl disable --now firewalld
+elif grep '6.[0-9]' /etc/redhat-release &>/dev/null;then
+  service iptables stop && chkconfig iptables off
+fi
+
+# 历史命令显示操作时间
+echo 'export HISTTIMEFORMAT="%F %T `whoami`  "' >>/etc/bashrc
+
+# SSH超时时间
+echo "export TMOUT=600" >> /etc/profile
+
+# 禁止root远程登录
+#sed -i 's/#PermitRootLogin yes/PermitRootLogin no' /etc/ssh/sshd_config
+
+# 禁止定时任务发送邮件
+sed -i 's/^MAILTO=root/MATLTO=""/' /etc/crontab
+
+# 设置最大打开文件数
+cat >> /etc/security/limits.conf << EOF
+* soft nofile 65535
+* hard nofile 65535
+EOF
+
+# 系统内核优化
+net ipv4 tcp_syncookies = 1
+net ipv4 tcp_max_tw_backets = 20480
+net ipv4 tcp_max_syn_backlog = 20480
+net core netdev_max_backlog = 262144
+net ipv4 tcp_fin_timeout = 20
+
+# 减少swap使用
+echo "0" > /proc/sys/vm/swappiness
+
+# 安装系统性能分析工具及其他
+#yum install gcc make autoconf vim sysstat net-tools iostat iftop iotp lrzsz -y

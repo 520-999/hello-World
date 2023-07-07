@@ -1,0 +1,21 @@
+#!/bin/bash
+#批量创建用户
+#用户名为手动填写的脚本参数,密码随机生成并打印
+#创建成功的用户信息追加到文件/root/account_password.system
+
+. ./public_functions.sh
+
+user_list=$@
+
+for user in $user_list; do
+  if ! id $user &>/dev/null; then
+    passwd=$(echo $RANDOM | md5sum | cut -c 1-8)
+    useradd $user
+    echo $passwd | passwd --stdin $user &>/dev/null
+    echo "$user $passwd" >> /root/account_password.system
+    logG "user $user create sucessful"
+    logG "passwd is $passwd"
+  else
+    logY "user $user already exists"
+  fi
+done

@@ -1,0 +1,170 @@
+# my script functions
+# 这是公共函数库，共14个
+# logW() logR() logG() logY() logP() execTips() checkTF()
+# 8.getFirewalldStatus() 9.enableOrDisEnableFirewalld() 10.checkVersion()
+# 11.add_docker_repo() 12.enable_Selinux() 13.disable_Selinux() 14.selinux_Menu()
+
+#1-5# 定义文本输出颜色
+logW() { echo -e "\e[1m $1 \e[0m"; }		#白色
+logR() { echo -e "\e[31m $1 \e[0m"; }		#红色
+logG() { echo -e "\e[32m $1 \e[0m"; }		#绿色
+logY() { echo -e "\e[33m  [$USER@$HOSTNAME] $1 \e[0m"; sleep 1; }		#黄色
+logP() { echo -en "\e[35m $1 \e[0m"; }		#紫色
+
+#6# 检查命令执行是否成功
+checkTF() {
+  if [[ $? -eq 0 ]]; then
+    logG "success ↑↑↑" && echo
+  else
+    logR "fail ↑↑↑      -->> return $?" && exit 0
+  fi
+  sleep 1
+}
+
+#7# 定义输入选择，输入y返回0，输入n返回1
+execTips() {
+  logP "$1 [y/n]":
+  read input
+
+  case $input in
+    [yY][eE][sS] | [yY])
+      return 0 ;;
+    [nN][oO] | [nN])
+      exit 1 ;;
+    *)
+      logR "输入不合法，请重新输入" ;;
+  esac
+}
+
+#8# 查询防火墙状态，开启返回1，关闭返回0
+getFirewalldStatus() {
+  firewall-cmd --state &> /dev/null
+
+  if [[ $? -eq 0 ]]; then
+    return 0
+  else
+    return 252
+  fi
+}
+
+#9# 开启或关闭防火墙
+enableOrDisEnableFirewalld() {
+  getFirewalldStatus
+  if [[ $? -eq 0 ]]; then
+    logP "检测到防火墙开启状态，是否关闭? 输入Y关闭,输入N取消 [y/n]:"
+    read -r isClose
+
+    case $isClose in
+      [yY][eE][sS] | [yY])
+        systemctl disable --now firewalld
+        if [[ $? -eq 0 ]]; then
+          logG "防火墙关闭成功！"
+        else
+          logR "防火墙关闭失败！"
+        fi ;;
+      *)
+        logR "输入不合法，请重新输入";;
+    esac
+
+  else
+    logP "检测到防火墙关闭状态，是否开启? 输入Y开启,输入N取消 [y/n]:"
+    read -r isOpen
+
+    case $isOpen in
+      [yY][eE][sS] | [yY])
+        systemctl enable --now firewalld
+        if [[ $? -eq 0 ]]; then
+          logG "防火墙开启成功！"
+        else
+          logR "防火墙开启失败！"
+        fi ;;
+      *)
+        logR "输入不合法，请重新输入";;
+    esac
+
+  fi
+}
+
+#10# 检查系统版本
+checkVersion() {
+  system_version=`rpm -q centos-release | cut -d- -f3`
+  
+  if [ $system_version -ne 7 ]; then
+      logR "Sorry~ 仅支持CentOS7.x的系统使用"
+      exit 1
+  fi
+}
+
+##---------------------------------------------------------yum_repos
+
+#11# 添加docker yum源
+add_docker_repo() {
+  logW "1. 添加docker的yum源"
+  logY "cat >/etc/yum.repos.d/docker-ce.repo <<-EOF..."
+  cat <<EOF >/etc/yum.repos.d/docker-ce.repo
+[docker-ce-stable]
+name=Docker CE Stable
+baseurl=https://download.docker.com/linux/centos/\$releasever/\$basearch/stable
+enabled=1
+gpgcheck=0
+gpgkey=https://download.docker.com/linux/centos/gpg
+EOF
+  yum repolist | grep docker-ce
+  checkTF
+}
+
+#12# 开启selinux
+enable_Selinux() {
+  selinuxStatus=`getenforce`
+  sed -i "s/SELINUX=(permissive|disabled)/SELINUX=enforcing/" /etc/selinux/config
+  if [ $selinuxStatus = 'Enforcing' ]; then
+    logY "selinux已经是开启状态"
+    logW "配置文件状态为: `cat /etc/selinux/config | grep "^SELINUX=$*"`"
+  elif [ $selinuxStatus = 'permissive' ]; then
+    setenforce 1
+    logY "selinux开启成功"
+    logW "配置文件更改为: `cat /etc/selinux/config | grep "^SELINUX=$*"`"
+  else
+    logY "selinux开启成功"
+    logW "配置文件已更改为：`cat /etc/selinux/config | grep "^SELINUX=$*"` 重启系统后生效!"
+  fi
+}
+
+#13# 关闭selinux
+disable_Selinux() {
+  selinuxStatus=`getenforce`
+  sed -Ei "s/SELINUX=(enforcing|permissive)/SELINUX=disabled/g" /etc/selinux/config
+  if [ $selinuxStatus = 'Disabled' ]; then
+    logY "selinux已经是关闭状态"
+    logW "配置文件状态为: `cat /etc/selinux/config | grep "^SELINUX=$*"`"
+  else
+    setenforce 0
+    logW "配置文件已更改为：`cat /etc/selinux/config | grep "^SELINUX=$*"`"
+  fi
+}
+
+#14# selinux菜单
+selinux_Menu() {
+  selinuxStatus=`getenforce` && clear
+
+  logW " ---------------------------------
+  当前selinux状态是: $selinuxStatus
+  ---------------------------------
+  1) 开启selinux  2) 关闭selinux
+  ---------------------------------"
+
+  logP "请输入有效的操作编号(1-2):"
+  read tipsNum
+
+  case $tipsNum in
+
+    1)
+      enable_Selinux && echo "" ;;
+    2)
+      disable_Selinux && echo "" ;;
+    *)
+      selinux_Start ;;
+  esac
+}
+
+checkVersion && clear
